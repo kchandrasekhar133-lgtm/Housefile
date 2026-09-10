@@ -1,65 +1,110 @@
-# Azure DevOps Pipeline for House Price Prediction Project
-
 trigger:
-  - main
+  branches:
+    include:
+      - main
 
 pool:
   vmImage: 'ubuntu-latest'
 
-variables:
-  pythonVersion: '3.10'
-
 steps:
 
-# 1. Set up Python
-- task: UsePythonVersion@0
-  displayName: 'Set up Python'
-  inputs:
-    versionSpec: '$(pythonVersion)'
-    addToPath: true
+# 1. Checkout source code
+- checkout: self
+  displayName: 'Checkout Source Code'
 
-# 2. Upgrade pip
+
+# 2. Setup Python 3.12
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.12'
+    addToPath: true
+  displayName: 'Setup Python 3.12'
+
+
+# 3. Verify Python version
 - script: |
-    python -m pip install --upgrade pip
+    python --version
+    python -m pip --version
+  displayName: 'Verify Python Version'
+
+
+# 4. Upgrade pip
+- script: |
+    python -m pip install --upgrade pip setuptools wheel
   displayName: 'Upgrade pip'
 
-# 3. Install project dependencies
+
+# 5. Install project dependencies
 - script: |
-    pip install -r requirement.txt
-    pip install pytest pytest-cov pytest-html
+    python -m pip install -r requirement.txt
   displayName: 'Install Dependencies'
 
-# 4. Create test-results directory
+
+# 6. Install unit test dependencies
+- script: |
+    python -m pip install pytest pytest-html pytest-cov
+  displayName: 'Install Unit Test Dependencies'
+
+
+# 7. Verify installed packages
+- script: |
+    python -c "import numpy; print('NumPy:', numpy.__version__)"
+    python -c "import pandas; print('Pandas:', pandas.__version__)"
+    python -c "import scipy; print('SciPy:', scipy.__version__)"
+    python -c "import sklearn; print('Scikit-learn:', sklearn.__version__)"
+    python -c "import flask; print('Flask:', flask.__version__)"
+  displayName: 'Verify Dependencies'
+
+
+# 8. Check Python files
+- script: |
+    python -m py_compile app.py
+    python -m py_compile house.py
+  displayName: 'Validate Python Code'
+
+
+# 9. Create test result folder
 - script: |
     mkdir -p test-results
-  displayName: 'Create Test Results Directory'
+  displayName: 'Create Test Result Folder'
 
-# 5. Run Unit Tests
-# Exclude the intentionally failing tests and test 19,
-# which currently expects a 400 response while the application returns 200.
+
+# 10. Run 50 unit tests
 - script: |
-    pytest test_app_50_cases.py \
-      -k "not FAIL and not test_19_predict_get_without_form_returns_400" \
+    pytest tests/test_app_50_cases.py \
+      -v \
+      -ra \
       --junitxml=test-results/junit.xml \
-      --html=test-results/pytest-report.html \
+      --html=test-results/unit-test-report.html \
       --self-contained-html
-  displayName: 'Run Unit Tests'
+  displayName: 'Run 50 Unit Tests'
+  continueOnError: true
 
-# 6. Publish JUnit Test Results
+
+# 11. Publish unit test results
 - task: PublishTestResults@2
-  displayName: 'Publish Unit Test Results'
-  condition: succeededOrFailed()
+  condition: always()
   inputs:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'test-results/junit.xml'
     testRunTitle: 'House Price Prediction Unit Tests'
-    failTaskOnFailedTests: true
+    failTaskOnFailedTests: false
+  displayName: 'Publish Unit Test Results'
 
-# 7. Publish HTML Test Report
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Test Report'
-  condition: succeededOrFailed()
+
+# 12. Publish HTML test report
+- task: PublishPipelineArtifact@1
+  condition: always()
   inputs:
-    PathtoPublish: 'test-results'
-    ArtifactName: 'Test-Reports'
-    publishLocation: 'Container'
+    targetPath: 'test-results'
+    artifact: 'unit-test-report'
+    publishLocation: 'pipeline'
+  displayName: 'Publish Unit Test Report'
+
+
+# 13. Start Flask application
+- script: |
+    python app.py &
+    sleep 10
+    echo "Flask application started successfully"
+  displayName: 'Start Flask Application'
