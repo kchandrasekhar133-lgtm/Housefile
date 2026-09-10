@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 import pickle
 
-# Load dataset
+# Load dataset  
 df = pd.read_csv("house_data.csv")
 
 # Select required columns
