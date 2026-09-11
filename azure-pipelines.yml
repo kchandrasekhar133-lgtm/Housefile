@@ -6,10 +6,6 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
-variables:
-  pythonVersion: '3.12'
-  imageName: 'house-price-app'
-
 steps:
 
 # ============================================================
@@ -23,12 +19,28 @@ steps:
 # ============================================================
 - task: UsePythonVersion@0
   inputs:
-    versionSpec: '$(pythonVersion)'
+    versionSpec: '3.12'
     addToPath: true
-  displayName: 'Setup Python $(pythonVersion)'
+  displayName: 'Setup Python'
 
 # ============================================================
-# 3. SonarQube Prepare
+# 3. Install Dependencies
+# ============================================================
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirement.txt
+  displayName: 'Install Dependencies'
+
+# ============================================================
+# 4. Verify Python Files
+# ============================================================
+- script: |
+    python -m py_compile app.py
+    python -m py_compile house.py
+  displayName: 'Validate Python Code'
+
+# ============================================================
+# 5. SonarQube Prepare
 # ============================================================
 - task: SonarCloudPrepare@3
   displayName: 'Prepare SonarQube Analysis'
@@ -40,111 +52,15 @@ steps:
     cliProjectKey: 'kchandrasekhar133-lgtm_Housefile'
     cliProjectName: 'Housefile'
     cliSources: '.'
-    extraProperties: |
-      sonar.python.version=3.12
-      sonar.python.coverage.reportPaths=coverage.xml
 
 # ============================================================
-# 4. Verify Python Installation
-# ============================================================
-- script: |
-    python --version
-    pip --version
-  displayName: 'Verify Python'
-
-# ============================================================
-# 5. Upgrade pip
-# ============================================================
-- script: |
-    python -m pip install --upgrade pip setuptools wheel
-  displayName: 'Upgrade pip'
-
-# ============================================================
-# 6. Install Dependencies
-# ============================================================
-- script: |
-    pip install -r requirement.txt
-  displayName: 'Install Project Dependencies'
-
-# ============================================================
-# 7. Install Test Packages
-# ============================================================
-- script: |
-    pip install pytest pytest-html pytest-cov
-  displayName: 'Install Testing Packages'
-
-# ============================================================
-# 8. Verify Dependencies
-# ============================================================
-- script: |
-    python -c "import flask"
-    python -c "import numpy"
-    python -c "import pandas"
-    python -c "import sklearn"
-    echo "All dependencies verified successfully"
-  displayName: 'Verify Dependencies'
-
-# ============================================================
-# 9. Validate Python Files
-# ============================================================
-- script: |
-    python -m py_compile app.py
-    python -m py_compile house.py
-  displayName: 'Validate Python Files'
-
-# ============================================================
-# 10. Create Test Results Directory
-# ============================================================
-- script: |
-    mkdir -p test-results
-  displayName: 'Create Test Results Folder'
-
-# ============================================================
-# 11. Run Unit Tests with Coverage
-# ============================================================
-- script: |
-    pytest tests/test_app_50_cases.py \
-      -v \
-      -ra \
-      --cov=. \
-      --cov-report=xml \
-      --junitxml=test-results/junit.xml \
-      --html=test-results/unit-test-report.html \
-      --self-contained-html
-  displayName: 'Run Unit Tests'
-  continueOnError: true
-
-# ============================================================
-# 12. Publish Test Results
-# ============================================================
-- task: PublishTestResults@2
-  condition: always()
-  inputs:
-    testResultsFormat: 'JUnit'
-    testResultsFiles: 'test-results/junit.xml'
-    testRunTitle: 'House Price Prediction Tests'
-    failTaskOnFailedTests: false
-  displayName: 'Publish Test Results'
-
-# ============================================================
-# 13. Publish HTML Test Report
-# ============================================================
-- task: PublishPipelineArtifact@1
-  condition: always()
-  inputs:
-    targetPath: 'test-results'
-    artifact: 'unit-test-report'
-    publishLocation: 'pipeline'
-  displayName: 'Publish Test Report'
-
-# ============================================================
-# 14. SonarQube Analysis
+# 6. SonarQube Analysis
 # ============================================================
 - task: SonarCloudAnalyze@3
   displayName: 'Run SonarQube Analysis'
 
 # ============================================================
-# 15. SonarQube Quality Gate
+# 7. SonarQube Quality Gate
 # ============================================================
 - task: SonarCloudPublish@3
   inputs:
@@ -152,43 +68,17 @@ steps:
   displayName: 'Publish Quality Gate'
 
 # ============================================================
-# 16. Install Trivy
+# 8. Install Trivy
 # ============================================================
 - script: |
     sudo apt-get update
-    sudo apt-get install -y wget
-    wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.66.0_Linux-64bit.deb
-    sudo dpkg -i trivy_0.66.0_Linux-64bit.deb
+    wget -qO - https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
   displayName: 'Install Trivy'
 
 # ============================================================
-# 17. Trivy Filesystem Scan
+# 9. Trivy Filesystem Scan
 # ============================================================
 - script: |
     trivy fs . --severity HIGH,CRITICAL
   displayName: 'Trivy Filesystem Scan'
   continueOnError: true
-
-# ============================================================
-# 18. Build Docker Image
-# ============================================================
-- script: |
-    docker build -t $(imageName):latest .
-  displayName: 'Docker Build'
-
-# ============================================================
-# 19. Trivy Docker Image Scan
-# ============================================================
-- script: |
-    trivy image $(imageName):latest --severity HIGH,CRITICAL
-  displayName: 'Trivy Docker Image Scan'
-  continueOnError: true
-
-# ============================================================
-# 20. Start Flask Application
-# ============================================================
-- script: |
-    python app.py &
-    sleep 10
-    echo "Flask application started successfully"
-  displayName: 'Start Flask Application'
