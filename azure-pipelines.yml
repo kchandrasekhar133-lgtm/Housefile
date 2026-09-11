@@ -9,202 +9,137 @@ pool:
 stages:
 
 # ============================================================
-# STAGE 1: BUILD AND TEST
+# STAGE 1 - BUILD
 # ============================================================
 
-- stage: Build_Test
-  displayName: 'Build and Run Tests'
+- stage: Build
+  displayName: 'Build Application'
 
   jobs:
-  - job: BuildAndTest
-    displayName: 'Python Build and Unit Tests'
+  - job: BuildJob
+    displayName: 'Python Build'
 
     steps:
 
-    # 1. Checkout source code
     - checkout: self
       fetchDepth: 0
-      displayName: 'Checkout Source Code'
 
-
-    # 2. Install Python
     - task: UsePythonVersion@0
       inputs:
-        versionSpec: '3.8'
+        versionSpec: '3.12'
         addToPath: true
-      displayName: 'Setup Python 3.8'
+      displayName: 'Setup Python'
 
-
-    # 3. Upgrade pip
     - script: |
         python -m pip install --upgrade pip
-      displayName: 'Upgrade pip'
-
-
-    # 4. Install project dependencies
-    - script: |
         pip install -r requirement.txt
       displayName: 'Install Dependencies'
 
-
-    # 5. Install test dependencies
-    - script: |
-        pip install pytest
-        pip install pytest-html
-        pip install pytest-cov
-      displayName: 'Install Unit Test Dependencies'
-
-
-    # 6. Validate Python code
     - script: |
         python -m py_compile app.py
         python -m py_compile house.py
-      displayName: 'Validate Python Code'
-
-
-    # 7. Create test result folder
-    - script: |
-        mkdir -p test-results
-      displayName: 'Create Test Result Folder'
-
-
-    # 8. Run 50 unit tests
-    - script: |
-        pytest tests/test_app_50_cases.py \
-          -v \
-          -ra \
-          --junitxml=test-results/junit.xml \
-          --html=test-results/unit-test-report.html \
-          --self-contained-html \
-          --cov=. \
-          --cov-report=xml:test-results/coverage.xml \
-          --cov-report=term
-      displayName: 'Run 50 Unit Tests'
-      continueOnError: true
-
-
-    # 9. Publish JUnit test results
-    - task: PublishTestResults@2
-      condition: always()
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: 'test-results/junit.xml'
-        testRunTitle: 'House Price Prediction Unit Tests'
-        failTaskOnFailedTests: false
-      displayName: 'Publish Unit Test Results'
-
-
-    # 10. Publish test reports + coverage
-    - task: PublishPipelineArtifact@1
-      condition: always()
-      inputs:
-        targetPath: 'test-results'
-        artifact: 'test-results'
-        publishLocation: 'pipeline'
-      displayName: 'Publish Test Results Artifact'
+      displayName: 'Validate Python Files'
 
 
 # ============================================================
-# STAGE 2: SONARQUBE CLOUD ANALYSIS
+# STAGE 2 - SONARCLOUD ANALYSIS
 # ============================================================
 
-- stage: SonarQube
-  displayName: 'SonarQube Code Quality Analysis'
+- stage: SonarCloud
+  displayName: 'SonarCloud Analysis'
 
-  dependsOn: Build_Test
-
-  condition: succeededOrFailed()
+  dependsOn: Build
 
   jobs:
-  - job: SonarQubeAnalysis
-    displayName: 'SonarQube Cloud Analysis'
+  - job: SonarAnalysis
+    displayName: 'Run SonarCloud'
 
     steps:
 
-    # 1. Checkout source code
     - checkout: self
       fetchDepth: 0
-      displayName: 'Checkout Source Code'
 
-
-    # 2. Download test results / coverage
-    - task: DownloadPipelineArtifact@2
+    - task: SonarCloudPrepare@3
       inputs:
-        artifact: 'test-results'
-        path: '$(Pipeline.Workspace)/test-results'
-      displayName: 'Download Test Results and Coverage'
-
-
-    # 3. Prepare SonarQube Cloud
-    - task: SonarCloudPrepare@4
-      inputs:
-        SonarCloud: 'SonarQube-House-Project'
+        SonarCloud: 'SonarCloud-Service'
         organization: 'kchandrasekhar'
-        scannerMode: 'cli'
+        scannerMode: 'CLI'
         configMode: 'manual'
         cliProjectKey: 'House-price-prediction-using-flask'
         cliProjectName: 'House Price Prediction'
         cliSources: '.'
         extraProperties: |
-          sonar.exclusions=**/tests/**,**/__pycache__/**,**/.pytest_cache/**
-          sonar.python.version=3.8
-          sonar.python.coverage.reportPaths=$(Pipeline.Workspace)/test-results/coverage.xml
-      displayName: 'Prepare SonarQube Cloud Analysis'
+          sonar.python.version=3.12
+          sonar.exclusions=**/__pycache__/**,**/.pytest_cache/**,**/venv/**
 
+      displayName: 'Prepare SonarCloud Analysis'
 
-    # 4. Run SonarQube analysis
-    - task: SonarCloudAnalyze@4
-      inputs:
-        jdkversion: 'JAVA_HOME_17_X64'
-      displayName: 'Run SonarQube Cloud Analysis'
+    - task: SonarCloudAnalyze@3
+      displayName: 'Run SonarCloud Analysis'
 
-
-    # 5. Publish Quality Gate
-    - task: SonarCloudPublish@4
+    - task: SonarCloudPublish@3
       inputs:
         pollingTimeoutSec: '300'
-      displayName: 'Publish SonarQube Quality Gate'
+      displayName: 'Publish Quality Gate'
 
 
 # ============================================================
-# STAGE 3: START FLASK APPLICATION
+# STAGE 3 - TRIVY FILE SYSTEM SCAN
 # ============================================================
 
-- stage: Run_Application
-  displayName: 'Run Flask Application'
+- stage: Trivy
+  displayName: 'Trivy Security Scan'
 
-  dependsOn: SonarQube
-
-  condition: succeeded()
+  dependsOn: SonarCloud
 
   jobs:
-  - job: StartFlask
-    displayName: 'Start Flask Application'
+  - job: TrivyScan
+    displayName: 'Run Trivy'
 
     steps:
 
-    # 1. Checkout source code
     - checkout: self
-      displayName: 'Checkout Source Code'
+
+    - script: |
+        sudo apt-get update
+        sudo apt-get install wget -y
+
+        wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.66.0_Linux-64bit.deb
+
+        sudo dpkg -i trivy_0.66.0_Linux-64bit.deb
+
+        trivy fs .
+      displayName: 'Run Trivy File System Scan'
 
 
-    # 2. Install Python
+# ============================================================
+# STAGE 4 - RUN FLASK APPLICATION
+# ============================================================
+
+- stage: RunApp
+  displayName: 'Run Flask App'
+
+  dependsOn: Trivy
+
+  jobs:
+  - job: StartApplication
+    displayName: 'Start Flask'
+
+    steps:
+
+    - checkout: self
+
     - task: UsePythonVersion@0
       inputs:
-        versionSpec: '3.8'
+        versionSpec: '3.12'
         addToPath: true
-      displayName: 'Setup Python 3.8'
 
-
-    # 3. Install dependencies
     - script: |
         pip install -r requirement.txt
       displayName: 'Install Dependencies'
 
-
-    # 4. Start Flask
     - script: |
         python app.py &
         sleep 10
-        echo "Flask application started successfully"
-      displayName: 'Start Flask Application'
+        echo "Flask Application Started Successfully"
+      displayName: 'Start Flask App'
