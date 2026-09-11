@@ -1,3 +1,88 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+
+# ============================================================
+# STAGE 1 - BUILD
+# ============================================================
+
+- stage: Build
+  displayName: 'Build Application'
+
+  jobs:
+  - job: BuildJob
+    displayName: 'Python Build'
+
+    steps:
+
+    - checkout: self
+      fetchDepth: 0
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+        addToPath: true
+      displayName: 'Setup Python'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirement.txt
+      displayName: 'Install Dependencies'
+
+    - script: |
+        python -m py_compile app.py
+        python -m py_compile house.py
+      displayName: 'Validate Python Files'
+
+
+# ============================================================
+# STAGE 2 - SONARCLOUD ANALYSIS
+# ============================================================
+
+- stage: SonarCloud
+  displayName: 'SonarCloud Analysis'
+
+  dependsOn: Build
+
+  jobs:
+  - job: SonarAnalysis
+    displayName: 'Run SonarCloud'
+
+    steps:
+
+    - checkout: self
+      fetchDepth: 0
+
+    - task: SonarCloudPrepare@3
+      displayName: 'Prepare SonarCloud Analysis'
+      inputs:
+        SonarCloud: 'SonarCloud-Service'
+        organization: 'kchandrasekhar'
+        scannerMode: 'CLI'
+        configMode: 'manual'
+        cliProjectKey: 'kchandrasekhar133-lgtm_Housefile'
+        cliProjectName: 'Housefile'
+        cliSources: '.'
+        extraProperties: |
+          sonar.python.version=3.12
+          sonar.sourceEncoding=UTF-8
+          sonar.exclusions=**/__pycache__/**,**/.pytest_cache/**,**/.venv/**,**/venv/**
+
+    - task: SonarCloudAnalyze@3
+      displayName: 'Run SonarCloud Analysis'
+
+    - task: SonarCloudPublish@3
+      displayName: 'Publish Quality Gate'
+      inputs:
+        pollingTimeoutSec: '300'
+
+
 # ============================================================
 # STAGE 3 - TRIVY SECURITY SCAN
 # ============================================================
@@ -17,6 +102,7 @@
 
     - script: |
         sudo apt-get update
+        sudo apt-get install -y curl
 
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 
@@ -24,3 +110,36 @@
 
         trivy fs . --severity HIGH,CRITICAL --exit-code 0
       displayName: 'Run Trivy File System Scan'
+
+
+# ============================================================
+# STAGE 4 - RUN FLASK APPLICATION
+# ============================================================
+
+- stage: RunApp
+  displayName: 'Run Flask App'
+
+  dependsOn: Trivy
+
+  jobs:
+  - job: StartApplication
+    displayName: 'Start Flask'
+
+    steps:
+
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.12'
+        addToPath: true
+
+    - script: |
+        pip install -r requirement.txt
+      displayName: 'Install Dependencies'
+
+    - script: |
+        python app.py &
+        sleep 15
+        echo "Flask Application Started Successfully"
+      displayName: 'Start Flask App'
