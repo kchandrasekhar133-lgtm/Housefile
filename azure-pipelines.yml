@@ -65,12 +65,13 @@ stages:
         organization: 'kchandrasekhar'
         scannerMode: 'CLI'
         configMode: 'manual'
-        cliProjectKey: 'House-price-prediction-using-flask'
-        cliProjectName: 'House Price Prediction'
+        cliProjectKey: 'kchandrasekhar133-lgtm_Housefile'
+        cliProjectName: 'Housefile'
         cliSources: '.'
         extraProperties: |
           sonar.python.version=3.12
-          sonar.exclusions=**/__pycache__/**,**/.pytest_cache/**,**/venv/**
+          sonar.sourceEncoding=UTF-8
+          sonar.exclusions=**/__pycache__/**,**/.pytest_cache/**,**/.venv/**,**/venv/**
 
       displayName: 'Prepare SonarCloud Analysis'
 
@@ -84,7 +85,7 @@ stages:
 
 
 # ============================================================
-# STAGE 3 - TRIVY FILE SYSTEM SCAN
+# STAGE 3 - TRIVY SECURITY SCAN
 # ============================================================
 
 - stage: Trivy
@@ -94,7 +95,7 @@ stages:
 
   jobs:
   - job: TrivyScan
-    displayName: 'Run Trivy'
+    displayName: 'Run Trivy Scan'
 
     steps:
 
@@ -108,7 +109,7 @@ stages:
 
         sudo dpkg -i trivy_0.66.0_Linux-64bit.deb
 
-        trivy fs .
+        trivy fs . --severity HIGH,CRITICAL
       displayName: 'Run Trivy File System Scan'
 
 
@@ -140,6 +141,6 @@ stages:
 
     - script: |
         python app.py &
-        sleep 10
+        sleep 15
         echo "Flask Application Started Successfully"
       displayName: 'Start Flask App'
