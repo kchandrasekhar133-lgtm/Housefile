@@ -40,7 +40,6 @@ stages:
         python -m py_compile house.py
       displayName: 'Validate Python Files'
 
-
 # ============================================================
 # STAGE 2 - SONARCLOUD ANALYSIS
 # ============================================================
@@ -72,7 +71,6 @@ stages:
           sonar.python.version=3.12
           sonar.sourceEncoding=UTF-8
           sonar.exclusions=**/__pycache__/**,**/.pytest_cache/**,**/.venv/**,**/venv/**
-
       displayName: 'Prepare SonarCloud Analysis'
 
     - task: SonarCloudAnalyze@3
@@ -82,7 +80,6 @@ stages:
       inputs:
         pollingTimeoutSec: '300'
       displayName: 'Publish Quality Gate'
-
 
 # ============================================================
 # STAGE 3 - TRIVY SECURITY SCAN
@@ -112,7 +109,6 @@ stages:
         trivy fs . --severity HIGH,CRITICAL
       displayName: 'Run Trivy File System Scan'
 
-
 # ============================================================
 # STAGE 4 - RUN FLASK APPLICATION
 # ============================================================
@@ -134,6 +130,7 @@ stages:
       inputs:
         versionSpec: '3.12'
         addToPath: true
+      displayName: 'Setup Python'
 
     - script: |
         pip install -r requirement.txt
