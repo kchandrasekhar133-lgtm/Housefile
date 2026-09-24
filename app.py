@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, abort, render_template, request
 import numpy as np
 import pickle
 
@@ -17,30 +17,29 @@ def index():
 @app.route("/predict", methods=["GET", "POST"])
 def predict():
 
-    if request.method == "POST":
+    if request.method == "GET":
+        abort(400)
 
-        bedrooms = float(request.form["bedrooms"])
-        bathrooms = float(request.form["bathrooms"])
-        floors = float(request.form["floors"])
-        yr_built = float(request.form["yr_built"])
+    bedrooms = float(request.form["bedrooms"])
+    bathrooms = float(request.form["bathrooms"])
+    floors = float(request.form["floors"])
+    yr_built = float(request.form["yr_built"])
 
-        arr = np.array([
-            bedrooms,
-            bathrooms,
-            floors,
-            yr_built
-        ]).reshape(1, -1)
+    arr = np.array([
+        bedrooms,
+        bathrooms,
+        floors,
+        yr_built
+    ]).reshape(1, -1)
 
-        prediction = model.predict(arr)
+    prediction = model.predict(arr)
 
-        result = round(float(prediction[0]), 2)
+    result = round(float(prediction[0]), 2)
 
-        return render_template(
-            "index.html",
-            data=result
-        )
-
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        data=result
+    )
 
 
 if __name__ == "__main__":
