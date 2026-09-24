@@ -50,6 +50,18 @@ jobs:
       - name: Run tests
         run: python -m pytest -q -k "not FAIL"
 
+  container:
+    name: Build Docker image
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag house-price-prediction:${{ github.sha }} .
+
   package:
     name: Package application
     needs: test
